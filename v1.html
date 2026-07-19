@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIを騙せ｜手書き数字でCNNと対決 — AIの頭の中を見ながら騙すゲーム</title>
+<style>
+  :root { --bg:#0f1216; --panel:#171b21; --line:#2a323c; --txt:#e6e9ee; --sub:#9aa4b1;
+          --acc:#7cc4ff; --good:#6bdf9a; --bad:#ff9b8a; --gold:#ffcf6b; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f4f6f8; --panel:#fff; --line:#dde3ea; --txt:#1b2027; --sub:#5b6673;
+            --acc:#1f6fb2; --good:#1f8a52; --bad:#c0492f; --gold:#a6791b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family:"Segoe UI","Yu Gothic UI",Meiryo,sans-serif; line-height:1.6; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 8px 0 2px; }
+  .sub { color: var(--sub); font-size: 13px; margin-bottom: 12px; }
+  .cols { display: flex; gap: 16px; flex-wrap: wrap; }
+  .col { flex: 1 1 300px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: var(--sub); letter-spacing: .05em; }
+  #draw { touch-action: none; border: 2px dashed var(--line); border-radius: 10px; background: #000; cursor: crosshair; width: 100%; max-width: 280px; display: block; margin: 0 auto; }
+  .btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+  button { background: var(--acc); color: #fff; border: 0; border-radius: 8px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--acc); border: 1px solid var(--acc); }
+  button:active { transform: scale(.97); }
+  .verdict { text-align: center; font-size: 16px; min-height: 3.2em; margin-top: 8px; }
+  .verdict b { font-size: 26px; }
+  .bars { display: grid; grid-template-columns: 1.2em 1fr 3.2em; gap: 4px 8px; align-items: center; font-size: 13px; }
+  .bar { height: 12px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--acc); width: 0%; transition: width .15s; }
+  .bar.top > i { background: var(--good); }
+  .maps { display: flex; flex-wrap: wrap; gap: 4px; }
+  .maps canvas { border: 1px solid var(--line); border-radius: 4px; image-rendering: pixelated; }
+  .camrow { display: flex; gap: 12px; align-items: center; justify-content: center; }
+  .camrow canvas { border: 1px solid var(--line); border-radius: 8px; image-rendering: pixelated; }
+  .cap { font-size: 11px; color: var(--sub); text-align: center; margin-top: 4px; }
+  .mode { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
+  .mode button { background: transparent; color: var(--sub); border: 1px solid var(--line); }
+  .mode button.on { background: var(--acc); color: #fff; border-color: var(--acc); }
+  #quest { text-align: center; font-size: 15px; }
+  #quest b { color: var(--gold); font-size: 22px; }
+  #score { color: var(--gold); font-weight: bold; }
+  .note { font-size: 12px; color: var(--sub); margin-top: 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .ok { color: var(--good); font-weight: bold; } .ng { color: var(--bad); font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧠 AIを騙せ — 手書き数字でCNNと対決</h1>
+  <div class="sub">AIの「頭の中」を見ながら、人間には読めるのにAIが間違える数字を描こう。ぜんぶブラウザの中で動いています（送信なし）。</div>
+
+  <div class="mode">
+    <button id="mObs" class="on">👀 観察モード</button>
+    <button id="mFool">😈 騙しモード</button>
+    <span id="score" style="align-self:center"></span>
+  </div>
+  <div id="quest" class="panel" style="display:none"></div>
+
+  <div class="cols">
+    <div class="col">
+      <div class="panel">
+        <h2>✏️ ここに数字を描く（0〜9）</h2>
+        <canvas id="draw" width="280" height="280"></canvas>
+        <div class="btns">
+          <button id="clear" class="ghost">消す</button>
+          <button id="judge">AIに判定させる</button>
+        </div>
+        <div class="verdict" id="verdict">数字を描いてみて</div>
+      </div>
+      <div class="panel">
+        <h2>📊 確信度（AIの自信）</h2>
+        <div class="bars" id="bars"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel">
+        <h2>🔍 AIが見た入力と、判断の根拠</h2>
+        <div class="camrow">
+          <div><canvas id="inview" width="28" height="28" style="width:112px;height:112px"></canvas><div class="cap">AIが見た28×28</div></div>
+          <div><canvas id="cam" width="28" height="28" style="width:112px;height:112px"></canvas><div class="cap">ここを見て判断した（赤=強い根拠）</div></div>
+        </div>
+        <div id="reason" class="cap" style="font-size:13px;margin-top:8px"></div>
+      </div>
+      <div class="panel">
+        <h2>🧩 第1層が見つけた特徴（8枚のフィルタ）</h2>
+        <div class="maps" id="maps1"></div>
+        <div class="cap">線の向き・エッジなどの単純な特徴に反応</div>
+      </div>
+      <div class="panel">
+        <h2>🧩 第2層が見つけた特徴（16枚）</h2>
+        <div class="maps" id="maps2"></div>
+        <div class="cap">特徴の組み合わせ（カーブ・交差など）に反応</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    仕組み: 小さな畳み込みニューラルネットワーク（約5千パラメータ・MNIST 6万枚で学習・テスト精度は weights 内に記載）。
+    わざと小さめのAIなので、仕組みを理解すると騙せます。騙せたあなたは、AIの弱点（見ている特徴の偏り）を理解した証拠。
+    ／ 完全自作・データはMNIST（パブリックドメイン）／ D-studyLab
+  </div>
+</div>
+
+<script src="weights.js"></script>
+<script src="cnn.js"></script>
+<script>
+"use strict";
+
+// ---------- drawing ----------
+const cv = document.getElementById('draw'), cx = cv.getContext('2d');
+cx.fillStyle = '#000'; cx.fillRect(0, 0, 280, 280);
+let drawing = false, dirty = false;
+function pos(e) { const r = cv.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return [(t.clientX - r.left) * 280 / r.width, (t.clientY - r.top) * 280 / r.height]; }
+function start(e) { drawing = true; const [x, y] = pos(e); cx.beginPath(); cx.moveTo(x, y); e.preventDefault(); }
+function move(e) { if (!drawing) return; const [x, y] = pos(e);
+  cx.lineTo(x, y); cx.strokeStyle = '#fff'; cx.lineWidth = 20; cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.stroke(); dirty = true; e.preventDefault(); }
+function end() { if (drawing && dirty) judge(); drawing = false; }
+cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move);
+window.addEventListener('mouseup', end);
+cv.addEventListener('touchstart', start, {passive: false}); cv.addEventListener('touchmove', move, {passive: false});
+cv.addEventListener('touchend', end);
+
+function preprocess() { // 280→28 with center-of-mass centering (MNIST style)
+  const d = cx.getImageData(0, 0, 280, 280).data;
+  const g = new Float32Array(28 * 28);
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++) {
+    let s = 0;
+    for (let dy = 0; dy < 10; dy++) for (let dx = 0; dx < 10; dx++)
+      s += d[((y*10+dy)*280 + x*10+dx) * 4];
+    g[y*28+x] = s / (100 * 255);
+  }
+  // center of mass shift
+  let sx = 0, sy = 0, m = 0;
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++) { const v = g[y*28+x]; m += v; sx += x*v; sy += y*v; }
+  const out = [];
+  const ox = m > 0 ? Math.round(13.5 - sx/m) : 0, oy = m > 0 ? Math.round(13.5 - sy/m) : 0;
+  for (let y = 0; y < 28; y++) { const row = new Float32Array(28);
+    for (let x = 0; x < 28; x++) { const yy = y - oy, xx = x - ox;
+      row[x] = (yy >= 0 && yy < 28 && xx >= 0 && xx < 28) ? g[yy*28+xx] : 0; }
+    out.push(row); }
+  return { img: out, mass: m };
+}
+
+// ---------- viz ----------
+const bars = document.getElementById('bars');
+for (let i = 0; i < 10; i++) bars.insertAdjacentHTML('beforeend',
+  `<div>${i}</div><div class="bar" id="b${i}"><i></i></div><div id="p${i}" style="color:var(--sub)">–</div>`);
+function heat(canvas, mat, scalePos) { // draw matrix as heatmap
+  const g = canvas.getContext('2d'), h = mat.length, w = mat[0].length;
+  canvas.width = w; canvas.height = h;
+  let mx = 1e-6; for (const r of mat) for (const v of r) mx = Math.max(mx, Math.abs(v));
+  const id = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = mat[y][x] / mx, i = (y*w+x)*4;
+    if (scalePos) { id.data[i] = v > 0 ? 255*v : 0; id.data[i+1] = 60*Math.abs(v); id.data[i+2] = v < 0 ? 255*-v : 0; }
+    else { id.data[i] = 30 + 225*v; id.data[i+1] = 60 + 160*v; id.data[i+2] = 255*v; }
+    id.data[i+3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+}
+function gray(canvas, mat) {
+  const g = canvas.getContext('2d'), h = mat.length, w = mat[0].length;
+  canvas.width = w; canvas.height = h;
+  const id = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = Math.min(1, mat[y][x]) * 255, i = (y*w+x)*4;
+    id.data[i] = id.data[i+1] = id.data[i+2] = v; id.data[i+3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+}
+const maps1 = document.getElementById('maps1'), maps2 = document.getElementById('maps2');
+const m1cv = [], m2cv = [];
+for (let i = 0; i < 8; i++) { const c = document.createElement('canvas'); c.style.width = '52px'; c.style.height = '52px'; maps1.appendChild(c); m1cv.push(c); }
+for (let i = 0; i < 16; i++) { const c = document.createElement('canvas'); c.style.width = '38px'; c.style.height = '38px'; maps2.appendChild(c); m2cv.push(c); }
+
+// ---------- game state ----------
+let mode = 'obs', target = -1, foolScore = 0, tries = 0;
+const KANA = ['ゼロ','イチ','ニ','サン','ヨン','ゴ','ロク','ナナ','ハチ','キュウ'];
+function newQuest() {
+  target = Math.floor(Math.random() * 10);
+  document.getElementById('quest').innerHTML =
+    `お題: 人間には <b>${target}</b> に見えるのに、AIが<b>別の数字</b>だと答える字を描け！`;
+}
+document.getElementById('mObs').onclick = () => { mode = 'obs';
+  document.getElementById('mObs').classList.add('on'); document.getElementById('mFool').classList.remove('on');
+  document.getElementById('quest').style.display = 'none'; };
+document.getElementById('mFool').onclick = () => { mode = 'fool';
+  document.getElementById('mFool').classList.add('on'); document.getElementById('mObs').classList.remove('on');
+  document.getElementById('quest').style.display = 'block'; newQuest(); updateScore(); };
+function updateScore() { document.getElementById('score').textContent = mode === 'fool' ? `騙し成功: ${foolScore}/${tries}` : ''; }
+
+// ---------- judge ----------
+function judge() {
+  const { img, mass } = preprocess();
+  if (mass < 0.5) { document.getElementById('verdict').textContent = 'もう少し大きく描いてみて'; return; }
+  const r = forward(img, WEIGHTS);
+  const order = r.probs.map((p, i) => [p, i]).sort((a, b) => b[0] - a[0]);
+  const [p1, k1] = order[0], [p2v, k2] = order[1];
+  for (let i = 0; i < 10; i++) {
+    const el = document.querySelector(`#b${i} i`);
+    el.style.width = (r.probs[i] * 100).toFixed(1) + '%';
+    document.getElementById(`p${i}`).textContent = (r.probs[i] * 100).toFixed(1) + '%';
+    document.getElementById(`b${i}`).classList.toggle('top', i === k1);
+  }
+  gray(document.getElementById('inview'), img);
+  heat(document.getElementById('cam'), upscale(cam(r.p2, k1, WEIGHTS), 28), true);
+  for (let i = 0; i < 8; i++) heat(m1cv[i], r.a1[i], false);
+  for (let i = 0; i < 16; i++) heat(m2cv[i], r.a2[i], false);
+  const conf = (p1 * 100).toFixed(1);
+  document.getElementById('reason').textContent =
+    `いちばん強い根拠は赤い領域。次点は「${k2}」(${(p2v*100).toFixed(1)}%)——ここが騙しの入口。`;
+  const v = document.getElementById('verdict');
+  if (mode === 'obs') {
+    v.innerHTML = `これは <b>${k1}</b> （${KANA[k1]}）だと思う。確信度 ${conf}%`;
+  } else {
+    tries++;
+    if (k1 !== target) {
+      foolScore++;
+      v.innerHTML = `<span class="ok">騙せた！</span> AIは <b>${k1}</b> だと答えた（${conf}%）。<br><span style="font-size:12px">AIは赤い領域の特徴を「${k1}」の証拠だと誤読した。</span>`;
+      setTimeout(newQuest, 1800);
+    } else {
+      v.innerHTML = `<span class="ng">見破られた…</span> AI「これは <b>${target}</b> でしょ（${conf}%）」。<br><span style="font-size:12px">次点「${k2}」に寄せて崩すのがコツ。</span>`;
+    }
+    updateScore();
+  }
+}
+function upscale(m, size) {
+  const h = m.length, out = [];
+  for (let y = 0; y < size; y++) { const row = new Float32Array(size);
+    for (let x = 0; x < size; x++) row[x] = m[Math.floor(y*h/size)][Math.floor(x*h/size)];
+    out.push(row); }
+  return out;
+}
+document.getElementById('clear').onclick = () => { cx.fillStyle = '#000'; cx.fillRect(0, 0, 280, 280); dirty = false;
+  document.getElementById('verdict').textContent = mode === 'fool' ? '描いて騙そう' : '数字を描いてみて'; };
+document.getElementById('judge').onclick = judge;
+</script>
+</body>
+</html>

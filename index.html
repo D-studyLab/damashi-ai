@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIを騙せ！｜審判AIに読ませて相手AIを騙す手書き数字バトル</title>
+<style>
+  :root { --bg:#0f1216; --panel:#171b21; --line:#2a323c; --txt:#e6e9ee; --sub:#9aa4b1;
+          --acc:#7cc4ff; --good:#6bdf9a; --bad:#ff9b8a; --gold:#ffcf6b; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f4f6f8; --panel:#fff; --line:#dde3ea; --txt:#1b2027; --sub:#5b6673;
+            --acc:#1f6fb2; --good:#1f8a52; --bad:#c0492f; --gold:#a6791b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family:"Segoe UI","Yu Gothic UI",Meiryo,sans-serif; line-height:1.6; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 14px; }
+  h1 { font-size: 22px; margin: 6px 0 2px; text-align:center; }
+  .sub { color: var(--sub); font-size: 13px; text-align:center; margin-bottom: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  button { background: var(--acc); color: #fff; border: 0; border-radius: 10px; padding: 10px 18px; font-size: 15px; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--acc); border: 1px solid var(--acc); }
+  button.big { font-size: 18px; padding: 14px 22px; width: 100%; margin: 6px 0; }
+  button:active { transform: scale(.97); }
+  .screen { display: none; } .screen.on { display: block; }
+  /* battle */
+  .cols { display: flex; gap: 14px; flex-wrap: wrap; }
+  .col { flex: 1 1 300px; }
+  #draw, #draw2 { touch-action: none; border: 2px dashed var(--line); border-radius: 10px; background: #000; cursor: crosshair; width: 100%; max-width: 280px; display: block; margin: 0 auto; }
+  .btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+  #quest { text-align:center; font-size: 16px; }
+  #quest b { color: var(--gold); font-size: 34px; }
+  .hud { display:flex; justify-content:space-around; text-align:center; font-size:13px; color:var(--sub); }
+  .hud b { display:block; font-size:20px; color:var(--txt); }
+  .bubble { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 14px; min-height:3.2em; font-size:15px; margin-top:10px; }
+  .bubble::before { content:"🤖 "; }
+  .bubble.shock { border-color: var(--bad); }
+  .verdict { text-align:center; font-size:15px; min-height:4.5em; margin-top:8px; }
+  .verdict .okv { color:var(--good); font-weight:bold; font-size:20px; }
+  .verdict .ngv { color:var(--bad); font-weight:bold; font-size:20px; }
+  .judgebox { font-size:12px; color:var(--sub); text-align:center; margin-top:4px; }
+  /* stamps */
+  .stamps { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; text-align:center; }
+  .stamp { border:1px solid var(--line); border-radius:8px; padding:6px 0; font-size:16px; color:var(--sub); }
+  .stamp.got { background:rgba(107,223,154,.15); border-color:var(--good); color:var(--txt); }
+  .stamp small { display:block; font-size:10px; }
+  /* rush timer */
+  #rushbar { height:10px; border-radius:5px; background:var(--line); overflow:hidden; margin:8px 0; }
+  #rushbar > i { display:block; height:100%; background:var(--gold); width:100%; }
+  /* lab (v1) */
+  .bars { display:grid; grid-template-columns:1.2em 1fr 3.2em; gap:4px 8px; align-items:center; font-size:13px; }
+  .bar { height:12px; border-radius:6px; background:var(--line); overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--acc); width:0%; transition:width .15s; }
+  .bar.top > i { background: var(--good); }
+  .maps { display:flex; flex-wrap:wrap; gap:4px; }
+  .maps canvas { border:1px solid var(--line); border-radius:4px; image-rendering:pixelated; }
+  .camrow { display:flex; gap:12px; align-items:center; justify-content:center; }
+  .camrow canvas { border:1px solid var(--line); border-radius:8px; image-rendering:pixelated; }
+  .cap { font-size:11px; color:var(--sub); text-align:center; margin-top:4px; }
+  .note { font-size:12px; color:var(--sub); margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+  #confetti { position:fixed; inset:0; pointer-events:none; z-index: 99; }
+  .home { font-size:13px; }
+  /* v3 training overlay */
+  #trainov { position:fixed; inset:0; background:rgba(0,0,0,.78); display:none; z-index:50; }
+  #trainov.on { display:flex; align-items:center; justify-content:center; }
+  #trainov .card { background:var(--panel); border:1px solid var(--gold); border-radius:14px; padding:18px; max-width:380px; width:92%; text-align:center; }
+  #losscv { border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  #confbar { height:14px; border-radius:7px; background:var(--line); overflow:hidden; margin:6px 0; }
+  #confbar > i { display:block; height:100%; background:var(--good); width:0%; transition:width .1s; }
+  .evoacc { height:8px; border-radius:4px; background:var(--line); overflow:hidden; margin-top:2px; }
+  .evoacc > i { display:block; height:100%; background:var(--acc); }
+</style>
+</head>
+<body>
+<canvas id="confetti"></canvas>
+<div class="wrap">
+  <h1>🧠 AIを騙せ！</h1>
+  <div class="sub">審判AIに「読める」と言わせつつ、相手AIには間違えさせる手書き数字バトル（全部ブラウザ内・送信なし）</div>
+
+  <!-- ===== title ===== -->
+  <div class="screen on" id="scr-title">
+    <div class="panel">
+      <button class="big" onclick="startBattle(1)">🥊 たいせん Lv1 — みならいAI（騙しやすい）</button>
+      <button class="big" onclick="startBattle(2)">🥊 たいせん Lv2 — しゅぎょうAI（手強い）</button>
+      <button class="big" style="background:linear-gradient(90deg,#c0492f,#a6791b)" onclick="startEvolve()">🔥 リベンジ — しんかAI（騙すたび、その場で学習して強くなる）</button>
+      <button class="big" onclick="startRush()">⏱ 60秒ラッシュ — 時間内に何回騙せる？</button>
+      <button class="big ghost" onclick="show('scr-zukan'); renderZukan()">📖 騙し図鑑</button>
+      <button class="big ghost" onclick="show('scr-lab')">🔬 けんきゅうしつ（AIの頭の中を見る）</button>
+      <div style="text-align:center"><button class="ghost home" id="sndbtn" onclick="toggleSnd()">🔊 効果音: ON</button></div>
+    </div>
+    <div class="panel" style="font-size:13px;color:var(--sub)">
+      <b>ルール</b>: お題の数字を描く → <b>審判AI</b>（大型・かしこい）が「お題として読める」と認め、かつ<b>相手AI</b>（小型）が別の数字と答えたら騙し成功。
+      雑に崩すと審判に弾かれる。<b>読めるのに騙す</b>のが腕の見せどころ。連続成功でコンボ倍率、数字0〜9をコンプで図鑑バッジ。<br>
+      <b style="color:var(--gold)">🔥リベンジ</b>: しんかAIは騙されると<b>その場で本物の機械学習（勾配降下）で特訓</b>し、同じ技は二度と通じなくなる。
+      AIはあなたの端末の中で、あなたの騙し技だけを喰って育つ——<b>世界に一体だけの敵</b>。特訓させるほど得点倍率が上がる。
+    </div>
+  </div>
+
+  <!-- ===== battle / rush ===== -->
+  <div class="screen" id="scr-battle">
+    <div class="panel">
+      <div class="hud">
+        <div>スコア<b id="score">0</b></div>
+        <div>コンボ<b id="combo">×0</b></div>
+        <div id="hud3">成功<b id="wins">0</b></div>
+        <div><button class="ghost home" onclick="endGame()">やめる</button></div>
+      </div>
+      <div id="rushwrap" style="display:none"><div id="rushbar"><i></i></div></div>
+    </div>
+    <div class="cols">
+      <div class="col">
+        <div class="panel">
+          <div id="quest">お題: <b>?</b> を描いて騙せ</div>
+          <canvas id="draw" width="280" height="280"></canvas>
+          <div class="btns">
+            <button id="clear" class="ghost">消す</button>
+            <button id="pass" class="ghost" title="コンボは切れる">パス</button>
+            <button id="attack">勝負！</button>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="panel">
+          <div class="bubble" id="bubble">相手AI、待機中…</div>
+          <div class="verdict" id="verdict"></div>
+          <div class="judgebox" id="judgebox"></div>
+        </div>
+        <div class="panel">
+          <div style="font-size:12px;color:var(--sub);margin-bottom:4px">このステージの騙しスタンプ</div>
+          <div class="stamps" id="stagestamps"></div>
+          <div id="evoinfo" style="display:none;margin-top:10px;font-size:12px;color:var(--sub)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== result ===== -->
+  <div class="screen" id="scr-result">
+    <div class="panel" style="text-align:center">
+      <h2 id="res-title">リザルト</h2>
+      <div id="res-body" style="font-size:15px"></div>
+      <div class="btns" style="margin-top:12px">
+        <button onclick="location.reload()">タイトルへ</button>
+        <button class="ghost" onclick="copyResult()">結果をコピー</button>
+      </div>
+      <div id="copied" class="cap"></div>
+    </div>
+  </div>
+
+  <!-- ===== zukan ===== -->
+  <div class="screen" id="scr-zukan">
+    <div class="panel">
+      <h2 style="font-size:16px">📖 騙し図鑑</h2>
+      <div style="font-size:13px;color:var(--sub)">Lv1 みならいAI</div>
+      <div class="stamps" id="zukan1"></div>
+      <div style="font-size:13px;color:var(--sub);margin-top:10px">Lv2 しゅぎょうAI</div>
+      <div class="stamps" id="zukan2"></div>
+      <div style="font-size:13px;color:var(--sub);margin-top:10px">🔥 しんかAI（学習する敵）</div>
+      <div class="stamps" id="zukan3"></div>
+      <div id="zukan-evo" style="margin-top:8px;font-size:13px;color:var(--sub)"></div>
+      <div style="font-size:13px;color:var(--sub);margin-top:12px">🖼 騙し技ギャラリー（最近の成功作）</div>
+      <div id="gallery" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+      <div id="zukan-badge" style="margin-top:10px;font-size:14px"></div>
+      <div class="btns">
+        <button class="ghost" onclick="show('scr-title')">もどる</button>
+        <button class="ghost" onclick="exportData()">🧪 研究データ書き出し</button>
+        <button class="ghost" id="resetevo" onclick="askResetEvo()">🧠 しんかAIを初期化</button>
+      </div>
+      <div class="cap" id="resetmsg"></div>
+    </div>
+  </div>
+
+  <!-- ===== v3 training overlay ===== -->
+  <div id="trainov"><div class="card">
+    <h2 id="tov-title" style="font-size:17px;margin:4px 0">⚡ しんかAI、特訓中…</h2>
+    <div id="tov-msg" style="font-size:12px;color:var(--sub)">いまブラウザの中で本物の学習（勾配降下法）が走っている</div>
+    <canvas id="losscv" width="320" height="110" style="width:100%;margin-top:8px"></canvas>
+    <div class="cap">損失（まちがい度）——下がる＝あなたの技を理解していく</div>
+    <div id="confbar"><i></i></div>
+    <div id="tov-conf" class="cap">この絵をお題として読める確信: 0%</div>
+    <div id="tov-status" style="font-size:14px;min-height:3.4em;margin-top:6px"></div>
+    <div class="btns"><button id="tov-btn" style="display:none" onclick="endTraining()">戦いにもどる</button></div>
+  </div></div>
+
+  <!-- ===== lab (v1 observation) ===== -->
+  <div class="screen" id="scr-lab">
+    <div class="cols">
+      <div class="col">
+        <div class="panel">
+          <h2 style="font-size:14px;color:var(--sub)">✏️ 数字を描くと、AIの頭の中が見える</h2>
+          <canvas id="draw2" width="280" height="280"></canvas>
+          <div class="btns">
+            <button id="clear2" class="ghost">消す</button>
+            <button class="ghost" onclick="show('scr-title')">もどる</button>
+          </div>
+          <div class="verdict" id="labverdict">数字を描いてみて</div>
+        </div>
+        <div class="panel"><h2 style="font-size:14px;color:var(--sub)">📊 確信度</h2><div class="bars" id="bars"></div></div>
+      </div>
+      <div class="col">
+        <div class="panel">
+          <h2 style="font-size:14px;color:var(--sub)">🔍 入力と判断根拠</h2>
+          <div class="camrow">
+            <div><canvas id="inview" width="28" height="28" style="width:112px;height:112px"></canvas><div class="cap">AIが見た28×28</div></div>
+            <div><canvas id="cam" width="28" height="28" style="width:112px;height:112px"></canvas><div class="cap">ここを見て判断（赤=強い根拠）</div></div>
+          </div>
+        </div>
+        <div class="panel"><h2 style="font-size:14px;color:var(--sub)">🧩 第1層の特徴（8枚）</h2><div class="maps" id="maps1"></div></div>
+        <div class="panel"><h2 style="font-size:14px;color:var(--sub)">🧩 第2層の特徴（16枚）</h2><div class="maps" id="maps2"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    モデル: 相手Lv1=約5千パラメータ／Lv2=約5万／審判=約20万（すべてMNIST学習）。
+    🔥しんかAIの特訓は本物のオンライン学習（全結合層の勾配降下・畳み込み層凍結・忘却防止のリプレイ学習つき）で、判定も学習もすべて端末内で完結——どこにも送信されない。
+    研究データ書き出しは自分の端末へのJSONダウンロードのみ。自作・データはMNIST（パブリックドメイン）／ D-studyLab
+  </div>
+</div>
+
+<script src="weights_lv1.js"></script>
+<script src="weights_lv2.js"></script>
+<script src="weights_judge.js"></script>
+<script src="features_replay.js"></script>
+<script src="cnn.js"></script>
+<script>
+"use strict";
+// ---------- screens ----------
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.getElementById(id).classList.add('on'); }
+
+// ---------- state ----------
+let ADV = WEIGHTS_LV1, lv = 1, mode = 'battle';
+let score = 0, combo = 0, wins = 0, tries = 0, best = 0, target = -1;
+let rushEnd = 0, rushTimer = null;
+const store = JSON.parse(localStorage.getItem('damashi') || '{"z1":[],"z2":[],"hi":0,"rush":0}');
+store.z3 = store.z3 || []; store.log = store.log || [];
+function save() { try { localStorage.setItem('damashi', JSON.stringify(store)); } catch (e) {} }
+
+// ---------- drawing (battle canvas) ----------
+function setupCanvas(cvId, onStroke) {
+  const cv = document.getElementById(cvId), cx = cv.getContext('2d');
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, 280, 280);
+  let drawing = false, dirty = false;
+  const pos = e => { const r = cv.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e;
+    return [(t.clientX - r.left) * 280 / r.width, (t.clientY - r.top) * 280 / r.height]; };
+  const start = e => { drawing = true; const [x, y] = pos(e); cx.beginPath(); cx.moveTo(x, y); e.preventDefault(); };
+  const move = e => { if (!drawing) return; const [x, y] = pos(e);
+    cx.lineTo(x, y); cx.strokeStyle = '#fff'; cx.lineWidth = 20; cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.stroke(); dirty = true; e.preventDefault(); };
+  const end = () => { if (drawing && dirty) onStroke(); drawing = false; };
+  cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+  cv.addEventListener('touchstart', start, {passive:false}); cv.addEventListener('touchmove', move, {passive:false}); cv.addEventListener('touchend', end);
+  return { cv, cx, clear() { cx.fillStyle = '#000'; cx.fillRect(0, 0, 280, 280); dirty = false; }, isDirty: () => dirty };
+}
+function preprocess(cx) {
+  const d = cx.getImageData(0, 0, 280, 280).data;
+  const g = new Float32Array(28 * 28);
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++) {
+    let s = 0;
+    for (let dy = 0; dy < 10; dy++) for (let dx = 0; dx < 10; dx++) s += d[((y*10+dy)*280 + x*10+dx) * 4];
+    g[y*28+x] = s / 25500;
+  }
+  let sx = 0, sy = 0, m = 0;
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++) { const v = g[y*28+x]; m += v; sx += x*v; sy += y*v; }
+  const ox = m > 0 ? Math.round(13.5 - sx/m) : 0, oy = m > 0 ? Math.round(13.5 - sy/m) : 0;
+  const out = [];
+  for (let y = 0; y < 28; y++) { const row = new Float32Array(28);
+    for (let x = 0; x < 28; x++) { const yy = y - oy, xx = x - ox;
+      row[x] = (yy >= 0 && yy < 28 && xx >= 0 && xx < 28) ? g[yy*28+xx] : 0; }
+    out.push(row); }
+  return { img: out, mass: m };
+}
+
+// ---------- sound (WebAudio, no assets) ----------
+let AC = null;
+function ac() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+  if (AC.state === 'suspended') AC.resume(); return AC; }
+function tone(freq, t0, dur, type, vol, slide) {
+  const a = ac(), o = a.createOscillator(), g = a.createGain();
+  o.type = type || 'sine'; o.frequency.setValueAtTime(freq, a.currentTime + t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(slide, a.currentTime + t0 + dur);
+  g.gain.setValueAtTime(0, a.currentTime + t0);
+  g.gain.linearRampToValueAtTime(vol || 0.15, a.currentTime + t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + t0 + dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.05);
+}
+function snd(name) {
+  if (store.snd === false) return;
+  try {
+    if (name === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.07, 0.25, 'triangle', 0.16));
+    else if (name === 'lose') tone(170, 0, 0.3, 'sawtooth', 0.07, 110);
+    else if (name === 'unread') tone(330, 0, 0.12, 'square', 0.05);
+    else if (name === 'learn') tone(180, 0, 0.6, 'sine', 0.09, 720);
+    else if (name === 'learned') [784, 659, 880].forEach((f, i) => tone(f, i * 0.09, 0.22, 'triangle', 0.14));
+    else if (name === 'tick') tone(760 + Math.random() * 300, 0, 0.03, 'square', 0.025);
+    else if (name === 'click') tone(600, 0, 0.05, 'sine', 0.05);
+  } catch (e) {}
+}
+function toggleSnd() {
+  store.snd = store.snd === false ? true : false; save();
+  document.getElementById('sndbtn').textContent = store.snd === false ? '🔇 効果音: OFF' : '🔊 効果音: ON';
+  if (store.snd !== false) snd('click');
+}
+
+// ---------- 実況 ----------
+const LINES = {
+  think: ['ん…？これは{g}か？', '{g}だな。見え見えだ', 'ふむ、{g}っぽい線だ…', '簡単簡単、{g}でしょ', '{g}…いや待てよ…'],
+  win:   ['なっ…！？ {t}だったのか！', 'ぐぬぬ…{g}にしか見えなかった…', 'バカな！完全に{g}だと思った！', 'この形で{t}は反則だろ！？'],
+  lose:  ['ふっ、{t}なんてお見通しだ', '甘い甘い。どう見ても{t}', '私を騙すには10年早い'],
+  unread:['審判『うーん、これは{j}に見えるが…』', '審判『読めん！書き直し！』']
+};
+const EVO_LINES = { // the learning boss has its own personality
+  think: ['……解析中。{g}の確率が高い', '{g}か。過去の敗北データと照合している', 'その線の癖、どこかで見たな……{g}だろう', '学習済みパターンと一致。{g}だ'],
+  win:   ['ば、バカな…！？ {t}だと！？ ……いい。この絵は今から私の教材だ', 'くっ…{g}と即答してしまった。……もらうぞ、その技', 'やられた…。だが忘れるな、私は学習する', '新パターン検出…。敗北を記録。特訓を開始する'],
+  lose:  ['学習の成果だ。{t}は隠せない', 'その技はもう教材にした。{t}だ', '進化した私に同じ手は通じない', '読める。読めるぞ…！{t}だ'],
+  unread: LINES.unread
+};
+function say(kind, g, shock) {
+  const a = (mode === 'evolve' ? EVO_LINES : LINES)[kind];
+  const s = a[Math.floor(Math.random() * a.length)]
+    .replace('{g}', g).replace('{t}', target).replace('{j}', g);
+  const b = document.getElementById('bubble');
+  b.textContent = s; b.classList.toggle('shock', !!shock);
+}
+
+// ---------- battle flow ----------
+const bat = setupCanvas('draw', liveGuess);
+function newQuest() { target = Math.floor(Math.random() * 10);
+  document.getElementById('quest').innerHTML = `お題: <b>${target}</b> を描いて騙せ`;
+  bat.clear(); document.getElementById('verdict').innerHTML = ''; document.getElementById('judgebox').textContent = '';
+  say('think', '…');
+  document.getElementById('bubble').textContent = (mode === 'evolve' && evo && evo.trainCount > 0)
+    ? `しんかAI「特訓${evo.trainCount}回済みだ。同じ手は二度と食わん」` : '相手AI「さあ来い！」'; }
+function liveGuess() {
+  const { img, mass } = preprocess(bat.cx); if (mass < 0.5) return;
+  const r = forward(img, ADV); const k = r.probs.indexOf(Math.max(...r.probs));
+  say('think', k);
+}
+function startBattle(level) {
+  lv = level; ADV = level === 1 ? WEIGHTS_LV1 : WEIGHTS_LV2; mode = 'battle';
+  score = 0; combo = 0; wins = 0; tries = 0;
+  document.getElementById('rushwrap').style.display = 'none';
+  document.getElementById('evoinfo').style.display = 'none';
+  document.getElementById('hud3').innerHTML = '成功<b id="wins">0</b>';
+  show('scr-battle'); renderStageStamps(); updateHud(); newQuest();
+}
+function startRush() {
+  lv = 1; ADV = WEIGHTS_LV1; mode = 'rush'; score = 0; combo = 0; wins = 0; tries = 0;
+  document.getElementById('evoinfo').style.display = 'none';
+  document.getElementById('rushwrap').style.display = 'block';
+  show('scr-battle'); renderStageStamps(); updateHud(); newQuest();
+  rushEnd = Date.now() + 60000;
+  rushTimer = setInterval(() => {
+    const left = rushEnd - Date.now();
+    document.querySelector('#rushbar > i').style.width = Math.max(0, left / 600) + '%';
+    if (left <= 0) { clearInterval(rushTimer); endGame(); }
+  }, 100);
+}
+function updateHud() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('combo').textContent = '×' + combo;
+  const w = document.getElementById('wins'); if (w) w.textContent = wins;
+}
+function stageKey() { return mode === 'evolve' ? 'z3' : (lv === 1 ? 'z1' : 'z2'); }
+function renderStageStamps() {
+  const got = store[stageKey()]; const el = document.getElementById('stagestamps'); el.innerHTML = '';
+  for (let i = 0; i < 10; i++) el.insertAdjacentHTML('beforeend',
+    `<div class="stamp ${got.includes(i) ? 'got' : ''}">${got.includes(i) ? '😈' : '·'}<small>${i}</small></div>`);
+}
+document.getElementById('attack').onclick = () => {
+  if (!bat.isDirty()) return;
+  const { img, mass } = preprocess(bat.cx);
+  if (mass < 0.5) { document.getElementById('verdict').textContent = 'もっと大きく描こう'; return; }
+  tries++;
+  const jr = forward(img, WEIGHTS_JUDGE);
+  const jk = jr.probs.indexOf(Math.max(...jr.probs)); const jp = jr.probs[jk];
+  const ar = forward(img, ADV);
+  const ak = ar.probs.indexOf(Math.max(...ar.probs)); const ap = ar.probs[ak];
+  const v = document.getElementById('verdict');
+  document.getElementById('judgebox').textContent =
+    `審判AI: 「${jk}」と読んだ(${(jp*100).toFixed(0)}%) ／ 相手AI: 「${ak}」(${(ap*100).toFixed(0)}%)`;
+  if (jk !== target || jp < 0.5) { // unreadable — no penalty, retry
+    say('unread', jk); snd('unread');
+    v.innerHTML = `<span class="ngv">判定ならず</span><br>審判AIがお題「${target}」と読めなかった（ノーカウント・描き直そう）`;
+    logAttempt(img, jk, jp, ak, ap, 'unread');
+    return;
+  }
+  if (ak !== target) { // fooled!
+    combo++; wins++;
+    let gain = Math.round(ap * 100 * (1 + (combo - 1) * 0.2));
+    if (mode === 'evolve') gain = Math.round(gain * (1 + Math.min(evo.trainCount, 20) * 0.1));
+    score += gain; best = Math.max(best, combo);
+    if (!store[stageKey()].includes(target)) { store[stageKey()].push(target); save(); renderStageStamps(); }
+    say('win', ak, true); confetti(); snd('win');
+    logAttempt(img, jk, jp, ak, ap, 'win');
+    if (mode === 'evolve') {
+      v.innerHTML = `<span class="okv">騙し成功！ +${gain}</span><br>だが、しんかAIはこの絵から学ぼうとしている……`;
+      setTimeout(() => startTraining(img, ar), 1100);
+    } else {
+      v.innerHTML = `<span class="okv">騙し成功！ +${gain}</span><br>審判は「${target}」と読み、相手AIは「${ak}」と誤答（確信${(ap*100).toFixed(0)}%が丸ごと得点）`;
+      setTimeout(newQuest, mode === 'rush' ? 700 : 1600);
+    }
+  } else {
+    combo = 0; say('lose', ak); snd('lose');
+    logAttempt(img, jk, jp, ak, ap, 'lose');
+    v.innerHTML = `<span class="ngv">見破られた…</span><br>相手AIの次点は「${second(ar.probs)}」——そっちに寄せて崩すのがコツ`;
+  }
+  updateHud();
+};
+function second(probs) { const o = Array.from(probs).map((p, i) => [p, i]).sort((a, b) => b[0] - a[0]); return o[1][1]; }
+
+// ---------- v3 revenge system: the AI that learns from you ----------
+const EVO_KEY = 'damashi_evo';
+let evo = null; // { W, trainCount, hist, acc, baseAcc }
+function loadEvo() {
+  const dc = o => JSON.parse(JSON.stringify(o));
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(EVO_KEY) || 'null'); } catch (e) {}
+  const W = { conv1_w: WEIGHTS_LV2.conv1_w, conv1_b: WEIGHTS_LV2.conv1_b, // conv frozen & shared
+              conv2_w: WEIGHTS_LV2.conv2_w, conv2_b: WEIGHTS_LV2.conv2_b,
+              hid_w: dc(s ? s.hid_w : WEIGHTS_LV2.hid_w), hid_b: dc(s ? s.hid_b : WEIGHTS_LV2.hid_b),
+              fc_w: dc(s ? s.fc_w : WEIGHTS_LV2.fc_w), fc_b: dc(s ? s.fc_b : WEIGHTS_LV2.fc_b) };
+  evo = { W, trainCount: s ? s.trainCount : 0,
+          hist: (s && s.hist ? s.hist : []).map(h => ({ f: Float64Array.from(h.f), y: h.y })),
+          acc: headAccuracy(W, REPLAY.ef, REPLAY.ey, REPLAY.scale),
+          baseAcc: headAccuracy(WEIGHTS_LV2, REPLAY.ef, REPLAY.ey, REPLAY.scale) };
+}
+function saveEvo() {
+  const rd = v => Math.round(v * 1e5) / 1e5;
+  const m2 = m => m.map(r => Array.from(r, rd));
+  const s = { hid_w: m2(evo.W.hid_w), hid_b: Array.from(evo.W.hid_b, rd),
+              fc_w: m2(evo.W.fc_w), fc_b: Array.from(evo.W.fc_b, rd),
+              trainCount: evo.trainCount,
+              hist: evo.hist.slice(-12).map(h => ({ f: Array.from(h.f, v => Math.round(v * 1000) / 1000), y: h.y })) };
+  try { localStorage.setItem(EVO_KEY, JSON.stringify(s)); } catch (e) {}
+}
+function startEvolve() {
+  if (!evo) loadEvo();
+  lv = 3; ADV = evo.W; mode = 'evolve';
+  score = 0; combo = 0; wins = 0; tries = 0;
+  document.getElementById('rushwrap').style.display = 'none';
+  document.getElementById('hud3').innerHTML = '成功<b id="wins">0</b>';
+  show('scr-battle'); renderStageStamps(); updateEvoInfo(); updateHud(); newQuest();
+}
+function updateEvoInfo() {
+  const el = document.getElementById('evoinfo');
+  el.style.display = 'block';
+  const acc = evo.acc * 100, base = evo.baseAcc * 100;
+  el.innerHTML =
+    `🔥 特訓回数 <b style="color:var(--gold)">${evo.trainCount}</b> ／ 得点倍率 ×${(1 + Math.min(evo.trainCount, 20) * 0.1).toFixed(1)}<br>` +
+    `📝 AI学力テスト（ふつうの字の正答率）: <b>${acc.toFixed(1)}%</b> <span style="opacity:.7">(入学時 ${base.toFixed(1)}%)</span>` +
+    `<div class="evoacc"><i style="width:${acc}%"></i></div>` +
+    `<span style="font-size:11px;opacity:.8">特訓しすぎたAIは、たまに素直な字を読み違える（実際のAI研究で知られる「頑健性と精度のトレードオフ」）。学力が下がった隙を突くのも戦略。</span>`;
+}
+// --- training overlay ---
+let trState = null; // { trainer, losses, img, advF }
+function startTraining(img, ar) {
+  const advF = Float64Array.from(ar.feat);
+  const trainer = makeTrainer(evo.W, advF, target, REPLAY, evo.hist, { earlyStop: true, anchorW0: WEIGHTS_LV2 });
+  trState = { trainer, losses: [], img, advF, target0: target };
+  document.getElementById('trainov').classList.add('on');
+  document.getElementById('tov-title').textContent = '⚡ しんかAI、特訓中…';
+  document.getElementById('tov-status').innerHTML = '';
+  document.getElementById('tov-btn').style.display = 'none';
+  document.getElementById('tov-conf').textContent = `この絵を「${target}」と読める確信: 0%`;
+  snd('learn');
+  requestAnimationFrame(trainTick);
+}
+function trainTick() {
+  const st = trState; if (!st) return;
+  for (let i = 0; i < 2 && !st.trainer.done(); i++) {
+    const r = st.trainer.step();
+    st.losses.push(r.loss);
+    const c = r.advProbs[st.target0] * 100;
+    document.querySelector('#confbar > i').style.width = c + '%';
+    document.getElementById('tov-conf').textContent =
+      `この絵を「${st.target0}」と読める確信: ${c.toFixed(1)}%（反復 ${r.t}/${st.trainer.hp.steps}）`;
+  }
+  drawLoss(st.losses); snd('tick');
+  if (!st.trainer.done()) { requestAnimationFrame(trainTick); return; }
+  // consolidation + bookkeeping
+  document.getElementById('tov-status').innerHTML = '📚 ふつうの字の復習中…';
+  setTimeout(() => {
+    st.trainer.consolidate(5);
+    evo.trainCount++;
+    evo.hist.push({ f: st.advF, y: st.target0 });
+    if (evo.hist.length > 12) evo.hist.shift();
+    evo.acc = headAccuracy(evo.W, REPLAY.ef, REPLAY.ey, REPLAY.scale);
+    saveEvo();
+    // revenge check on the very same drawing
+    const r2 = forward(st.img, evo.W);
+    const k2 = r2.probs.indexOf(Math.max(...r2.probs));
+    const learned = k2 === st.target0;
+    document.getElementById('tov-title').textContent = learned ? '🧠 特訓完了。' : '🌀 特訓したが……';
+    document.getElementById('tov-status').innerHTML = learned
+      ? `<b style="color:var(--bad)">「さっきの絵、もう一度見せてみろ。……『${st.target0}』だ。二度と通じない」</b><br>` +
+        `<span style="font-size:12px;color:var(--sub)">同じ絵の再判定: 「${k2}」（確信${(r2.probs[k2]*100).toFixed(0)}%）。新しい騙し方を発明せよ</span>`
+      : `<b style="color:var(--good)">「くっ…まだこの絵は『${k2}』に見える…」</b><br>` +
+        `<span style="font-size:12px;color:var(--sub)">奇跡的にまだ騙せている。この技は殿堂入り級</span>`;
+    document.getElementById('tov-btn').style.display = '';
+    updateEvoInfo(); snd('learned');
+  }, 350);
+}
+function drawLoss(losses) {
+  const cv = document.getElementById('losscv'), g = cv.getContext('2d');
+  g.clearRect(0, 0, cv.width, cv.height);
+  if (!losses.length) return;
+  const mx = Math.max(...losses, 0.01);
+  g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--gold');
+  g.lineWidth = 2; g.beginPath();
+  const n = LEARN_HP.steps;
+  for (let i = 0; i < losses.length; i++) {
+    const x = 8 + i / (n - 1) * (cv.width - 16);
+    const y = cv.height - 10 - (losses[i] / mx) * (cv.height - 22);
+    i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  }
+  g.stroke();
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--sub');
+  g.font = '11px sans-serif';
+  g.fillText('loss ' + losses[losses.length - 1].toFixed(3), 10, 14);
+}
+function endTraining() {
+  document.getElementById('trainov').classList.remove('on');
+  trState = null;
+  newQuest();
+}
+function askResetEvo() {
+  const b = document.getElementById('resetevo');
+  if (b.dataset.arm) {
+    localStorage.removeItem(EVO_KEY); evo = null; loadEvo();
+    b.textContent = '🧠 しんかAIを初期化'; delete b.dataset.arm;
+    document.getElementById('resetmsg').textContent = 'しんかAIを工場出荷状態に戻しました（特訓の記憶は消えた）';
+    renderZukan();
+  } else {
+    b.dataset.arm = '1'; b.textContent = '⚠ 本当に初期化する（もう一度押す）';
+    setTimeout(() => { if (b.dataset.arm) { delete b.dataset.arm; b.textContent = '🧠 しんかAIを初期化'; } }, 4000);
+  }
+}
+// --- research log (stays on this device; export = JSON download only) ---
+function packImg(img) { // 28×28 → 392 bytes (2px/byte, 16 levels) → base64
+  const b = new Uint8Array(392);
+  for (let i = 0; i < 392; i++) {
+    const p = j => Math.round(Math.min(1, img[Math.floor(j / 28)][j % 28]) * 15);
+    b[i] = (p(2 * i) << 4) | p(2 * i + 1);
+  }
+  let s = ''; for (const v of b) s += String.fromCharCode(v);
+  return btoa(s);
+}
+function logAttempt(img, jk, jp, ak, ap, outcome) {
+  store.log.push({ ts: Date.now(), mode: mode === 'evolve' ? 'evolve' : mode, lv,
+    target, judge: jk, judge_p: +jp.toFixed(3), adv: ak, adv_p: +ap.toFixed(3),
+    outcome, trained: mode === 'evolve' ? evo.trainCount : null, img: packImg(img) });
+  if (store.log.length > 300) store.log.splice(0, store.log.length - 300);
+  save();
+}
+function exportData() {
+  if (!evo) loadEvo();
+  const data = {
+    meta: { app: 'damashi-ai v3', exported: new Date().toISOString(),
+      what: '端末内プレイログ（手描き画像と判定結果）。個人情報なし。',
+      img_format: 'base64 of 392 bytes; 2 pixels/byte (high nibble first); 28x28 row-major; pixel = nibble/15' },
+    evolve: { trainCount: evo.trainCount, cleanAcc: +evo.acc.toFixed(4), baseAcc: +evo.baseAcc.toFixed(4) },
+    attempts: store.log };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  a.download = 'damashi_ai_research_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+}
+document.getElementById('clear').onclick = () => { bat.clear(); document.getElementById('verdict').innerHTML = ''; };
+document.getElementById('pass').onclick = () => { combo = 0; updateHud(); snd('click'); newQuest(); };
+function endGame() {
+  if (rushTimer) { clearInterval(rushTimer); rushTimer = null; }
+  if (mode === 'rush' && wins > (store.rush || 0)) { store.rush = wins; save(); }
+  if (score > (store.hi || 0)) { store.hi = score; save(); }
+  document.getElementById('res-title').textContent =
+    mode === 'rush' ? '⏱ 60秒ラッシュ結果' : mode === 'evolve' ? '🔥 リベンジ しんかAI 結果' : `🥊 たいせん Lv${lv} 結果`;
+  document.getElementById('res-body').innerHTML =
+    `スコア <b style="font-size:26px;color:var(--gold)">${score}</b>（自己ベスト ${store.hi}）<br>` +
+    `騙し成功 ${wins}回 ／ 挑戦 ${tries}回 ／ 最大コンボ ×${best}` +
+    (mode === 'rush' ? `<br>ラッシュ自己ベスト: ${store.rush}回` : '') +
+    (mode === 'evolve' ? `<br>あなたのしんかAI: 特訓${evo.trainCount}回・学力${(evo.acc*100).toFixed(1)}%` : '') +
+    `<br><span style="font-size:12px;color:var(--sub)">図鑑: Lv1 ${store.z1.length}/10 ・ Lv2 ${store.z2.length}/10 ・ しんか ${store.z3.length}/10</span>`;
+  show('scr-result');
+}
+function copyResult() {
+  const which = mode === 'rush' ? '60秒ラッシュ' : mode === 'evolve' ? `学習するAI(特訓${evo.trainCount}回)相手` : 'Lv' + lv;
+  const t = `🧠AIを騙せ！ ${which}でスコア${score}・騙し${wins}回（最大コンボ×${best}）。騙すたびその場で学習して強くなるAIとの手書き数字バトル\nhttps://d-studylab.github.io/damashi-ai/`;
+  navigator.clipboard && navigator.clipboard.writeText(t);
+  document.getElementById('copied').textContent = 'コピーしました（Xにでも貼ってください）';
+}
+// ---------- zukan ----------
+function renderZukan() {
+  for (const [id, key] of [['zukan1', 'z1'], ['zukan2', 'z2'], ['zukan3', 'z3']]) {
+    const el = document.getElementById(id); el.innerHTML = '';
+    for (let i = 0; i < 10; i++) el.insertAdjacentHTML('beforeend',
+      `<div class="stamp ${store[key].includes(i) ? 'got' : ''}">${store[key].includes(i) ? '😈' : '·'}<small>${i}</small></div>`);
+  }
+  if (!evo) loadEvo();
+  document.getElementById('zukan-evo').innerHTML =
+    `あなたのしんかAI: 特訓 <b>${evo.trainCount}</b> 回 ／ 学力 ${(evo.acc*100).toFixed(1)}%（入学時 ${(evo.baseAcc*100).toFixed(1)}%） ／ 記憶中の騙し技 ${evo.hist.length}件`;
+  const b = [];
+  if (store.z1.length === 10) b.push('🏅みならい騙しマスター');
+  if (store.z2.length === 10) b.push('🏆しゅぎょう騙しマスター');
+  if (store.z3.length === 10) b.push('👑しんか騙しマスター（学習するAIから全数字を奪った）');
+  document.getElementById('zukan-badge').textContent = b.length ? 'バッジ: ' + b.join('　') : 'バッジ: （0〜9コンプで獲得）';
+  renderGallery();
+}
+function unpackImg(b64) {
+  const bin = atob(b64); const img = [];
+  for (let y = 0; y < 28; y++) img.push(new Float32Array(28));
+  for (let j = 0; j < 784; j++) {
+    const byte = bin.charCodeAt(j >> 1);
+    img[Math.floor(j / 28)][j % 28] = ((j % 2 === 0) ? (byte >> 4) : (byte & 15)) / 15;
+  }
+  return img;
+}
+function renderGallery() {
+  const el = document.getElementById('gallery'); el.innerHTML = '';
+  const winsLog = (store.log || []).filter(l => l.outcome === 'win' && l.img).slice(-24).reverse();
+  if (!winsLog.length) { el.innerHTML = '<span class="cap">（騙しに成功すると、ここに技が飾られる）</span>'; return; }
+  for (const l of winsLog) {
+    const d = document.createElement('div'); d.style.textAlign = 'center';
+    const c = document.createElement('canvas');
+    c.style.width = '56px'; c.style.height = '56px'; c.style.imageRendering = 'pixelated';
+    c.style.border = '1px solid var(--line)'; c.style.borderRadius = '6px';
+    try { gray(c, unpackImg(l.img)); } catch (e) { continue; }
+    const cap = document.createElement('div'); cap.className = 'cap';
+    cap.textContent = `${l.target}→「${l.adv}」`;
+    d.appendChild(c); d.appendChild(cap); el.appendChild(d);
+  }
+}
+// ---------- confetti ----------
+const cf = document.getElementById('confetti'), cfx = cf.getContext('2d');
+function confetti() {
+  cf.width = innerWidth; cf.height = innerHeight;
+  const ps = Array.from({length: 80}, () => ({ x: innerWidth/2, y: innerHeight/3,
+    vx: (Math.random()-0.5)*14, vy: -Math.random()*10-2, c: `hsl(${Math.random()*360},90%,60%)`, s: Math.random()*6+3 }));
+  let n = 0;
+  const tick = () => { cfx.clearRect(0, 0, cf.width, cf.height);
+    for (const p of ps) { p.x += p.vx; p.y += p.vy; p.vy += 0.35; cfx.fillStyle = p.c; cfx.fillRect(p.x, p.y, p.s, p.s); }
+    if (++n < 60) requestAnimationFrame(tick); else cfx.clearRect(0, 0, cf.width, cf.height); };
+  tick();
+}
+// ---------- lab (v1, uses Lv1 model) ----------
+const lab = setupCanvas('draw2', labJudge);
+const bars = document.getElementById('bars');
+for (let i = 0; i < 10; i++) bars.insertAdjacentHTML('beforeend',
+  `<div>${i}</div><div class="bar" id="b${i}"><i></i></div><div id="p${i}" style="color:var(--sub)">–</div>`);
+const maps1 = document.getElementById('maps1'), maps2 = document.getElementById('maps2');
+const m1cv = [], m2cv = [];
+for (let i = 0; i < 8; i++) { const c = document.createElement('canvas'); c.style.width = '52px'; c.style.height = '52px'; maps1.appendChild(c); m1cv.push(c); }
+for (let i = 0; i < 16; i++) { const c = document.createElement('canvas'); c.style.width = '38px'; c.style.height = '38px'; maps2.appendChild(c); m2cv.push(c); }
+function heat(canvas, mat, signed) {
+  const g = canvas.getContext('2d'), h = mat.length, w = mat[0].length;
+  canvas.width = w; canvas.height = h;
+  let mx = 1e-6; for (const r of mat) for (const v of r) mx = Math.max(mx, Math.abs(v));
+  const id = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = mat[y][x] / mx, i = (y*w+x)*4;
+    if (signed) { id.data[i] = v > 0 ? 255*v : 0; id.data[i+1] = 60*Math.abs(v); id.data[i+2] = v < 0 ? 255*-v : 0; }
+    else { id.data[i] = 30 + 225*v; id.data[i+1] = 60 + 160*v; id.data[i+2] = 255*v; }
+    id.data[i+3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+}
+function gray(canvas, mat) {
+  const g = canvas.getContext('2d'); canvas.width = 28; canvas.height = 28;
+  const id = g.createImageData(28, 28);
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++) {
+    const v = Math.min(1, mat[y][x]) * 255, i = (y*28+x)*4;
+    id.data[i] = id.data[i+1] = id.data[i+2] = v; id.data[i+3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+}
+function upscale(m, size) { const h = m.length, out = [];
+  for (let y = 0; y < size; y++) { const row = new Float32Array(size);
+    for (let x = 0; x < size; x++) row[x] = m[Math.floor(y*h/size)][Math.floor(x*h/size)];
+    out.push(row); } return out; }
+function labJudge() {
+  const { img, mass } = preprocess(lab.cx); if (mass < 0.5) return;
+  const r = forward(img, WEIGHTS_LV1);
+  const k = r.probs.indexOf(Math.max(...r.probs));
+  for (let i = 0; i < 10; i++) {
+    document.querySelector(`#b${i} i`).style.width = (r.probs[i]*100).toFixed(1) + '%';
+    document.getElementById(`p${i}`).textContent = (r.probs[i]*100).toFixed(1) + '%';
+    document.getElementById(`b${i}`).classList.toggle('top', i === k);
+  }
+  gray(document.getElementById('inview'), img);
+  heat(document.getElementById('cam'), upscale(cam(r.p2, k, WEIGHTS_LV1), 28), true);
+  for (let i = 0; i < 8; i++) heat(m1cv[i], r.a1[i], false);
+  for (let i = 0; i < 16; i++) heat(m2cv[i], r.a2[i], false);
+  document.getElementById('labverdict').innerHTML = `これは <b>${k}</b> だと思う（${(r.probs[k]*100).toFixed(1)}%）`;
+}
+document.getElementById('clear2').onclick = () => { lab.clear(); document.getElementById('labverdict').textContent = '数字を描いてみて'; };
+// restore sound toggle state
+if (store.snd === false) document.getElementById('sndbtn').textContent = '🔇 効果音: OFF';
+</script>
+</body>
+</html>
